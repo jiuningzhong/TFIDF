@@ -12,10 +12,27 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.cluster import KMeans
+import csv
 warnings.filterwarnings('ignore')
 pd.options.display.max_columns = 30
 InteractiveShell.ast_node_interactivity = 'all'
 nlp = en_core_web_sm.load()
+
+csv.register_dialect("comma", delimiter=",")
+
+class Dict(dict):
+    def __missing__(self, key):
+        return 0
+
+text_dict = Dict()
+tf_idf_dict = Dict()
+
+def write_to_csv(dict1, dict2, file_name):
+    with open(file_name, 'w', newline='', encoding="utf8") as csvfile:
+        writer = csv.writer(csvfile, dialect="comma")
+        keys = dict1.keys()
+        for k in keys:
+            writer.writerow((dict2[k], dict1[k]))
 
 def get_top_n_words(corpus, n=None):
     vec = CountVectorizer(stop_words='english', ngram_range=(1,2), min_df=0.03, max_features=100).fit(corpus)
@@ -68,10 +85,9 @@ def lemmatizer(text):
 if __name__ == "__main__":
     # os.getcwd()
     # df = pd.read_csv('./api/Train_all_types.csv', encoding='utf-8')
-    df = pd.read_csv('Train_all_types.csv', encoding='utf-8')
-    # print(df)
+    df = pd.read_csv('Train_all_types_comma.csv', encoding='utf-8')
 
-    print('We have', len(df), 'nodes in the data')
+    # print('We have', len(df), 'nodes in the data')
     df_clean = pd.DataFrame(df.text.apply(lambda x: clean_text(x)))
     df_clean["text_lemmatize"] = df_clean.apply(lambda x: lemmatizer(x['text']), axis=1)
     df_clean.to_csv('df_clean.csv', index=False)
@@ -146,12 +162,13 @@ if __name__ == "__main__":
 
     topic_keywords = show_topics(vectorizer=vectorizer, lda_model=lda_model, n_words=20)
 
-    print(topic_keywords[1])
+    # print(topic_keywords[1])
 
     # learn tfidf using TfidfVectorizer from sklean
-    tfidf_vectorizer = TfidfVectorizer(use_idf=True, ngram_range=(1,6), stop_words='english',
+    tfidf_vectorizer = TfidfVectorizer(use_idf=True, ngram_range=(1,5), stop_words='english', # ngram_range=(1,6)
                                         analyzer = 'word',
                                         min_df = 3,  # minimum required occurences of a word
+                                        # min_df = 3
                                         lowercase = True,  # convert all words to lowercase
                                         token_pattern = '[a-zA-Z0-9]{3,}',  # num chars > 3
                                         max_features = 5000,
@@ -163,15 +180,24 @@ if __name__ == "__main__":
     feature_names = tfidf_vectorizer.get_feature_names()
     count = 0
     Y = np.zeros(X.shape[0])
+
+    # print(X.shape[0])
+    # print(len(df_u_clean))
+
     for i in range(X.shape[0]):
         Y[i] = X[i].sum()
-        if Y[i] > 6:
-            print('position: ' + str(i) + ' tf-idf value: ' + str(Y[i]))
-            print(df_u_clean[i])
-            count = count + 1
-    print(count)
+        if Y[i] > 7: #8
+            # print('line number: ' + str((i+2)) + ' tf-idf value: ' + str(Y[i]))
+            # print(df_u_clean[i])
 
-    doc = 0
+            text_dict[count] = 'line number: ' + str((i+2)) + ' node text: ' + df_u_clean[i]
+            tf_idf_dict[count] = Y[i]
+            count = count + 1
+    # print('tf_idf count: ' + str(count))
+
+    write_to_csv(tf_idf_dict, text_dict, 'tf_idf_novelty_nodes_hashes.csv')
+
+    doc = 115
     feature_index = X[doc, :].nonzero()[1]
     tfidf_scores = zip(feature_index, [X[doc, x] for x in feature_index])
 
@@ -182,22 +208,22 @@ if __name__ == "__main__":
     # fitted_vectorizer = tfidf_vectorizer.fit(df_u_clean)
     # tfidf_vectorizer_vectors = fitted_vectorizer.transform(df_u_clean)
     # Clustering text documents using k-means
-    print("n_samples: %d, n_features: %d" % X.shape)
+    # print("n_samples: %d, n_features: %d" % X.shape)
 
     svd = TruncatedSVD(100)
     normalizer = Normalizer(copy=False)
     lsa = make_pipeline(svd, normalizer)
     X = lsa.fit_transform(X)
     explained_variance = svd.explained_variance_ratio_.sum()
-    print("Explained variance of the SVD step: {}%".format(int(explained_variance * 100)))
+    # print("Explained variance of the SVD step: {}%".format(int(explained_variance * 100)))
     km = KMeans(n_clusters=4, init='k-means++', max_iter=100, n_init=1, verbose=0)
-    print("Clustering sparse data with %s" % km)
+    # print("Clustering sparse data with %s" % km)
     km.fit(X)
-    print("Top terms per cluster:")
+    # print("Top terms per cluster:")
     order_centroids = km.cluster_centers_.argsort()[:, ::-1]
     terms = tfidf_vectorizer.get_feature_names()
-    for i in range(4):
-        print("Cluster %d:" % i, end='')
-        for ind in order_centroids[i, :10]:
-            print(' %s' % terms[ind], end='')
-        print()
+    #for i in range(4):
+        # print("Cluster %d:" % i, end='')
+        #for ind in order_centroids[i, :10]:
+            # print(' %s' % terms[ind], end='')
+        # print()
